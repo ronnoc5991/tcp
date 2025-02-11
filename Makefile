@@ -1,17 +1,33 @@
-build: build_client build_server
+compiler := gcc
+flags := -Wall
 
-build_client: ./client/main.c ./utils/mysockets.c
-	gcc ./client/main.c ./utils/mysockets.c -o ./bin/client -Wall
+bindir := ./bin
+objdir := ./obj
+utilsdir := ./utils
+clientdir := ./client
+serverdir := ./server
+includedir := ./include
 
-build_server: ./server/main.c ./utils/mysockets.c
-	gcc ./server/main.c ./utils/mysockets.c -o ./bin/server -Wall
+build: $(bindir)/client $(bindir)/server
 
-run_client: ./client
-	./bin/client
+$(bindir)/client: $(objdir)/client.o $(objdir)/mysockets.o
+	$(compiler) $^ -o $@ $(flags)
 
-run_server: ./server
-	./bin/server
+$(objdir)/client.o: $(clientdir)/main.c $(includedir)/mysockets.h
+	$(compiler) -c $< -o $@ $(flags)
+
+$(objdir)/mysockets.o: $(utilsdir)/mysockets.c $(includedir)/mysockets.h
+	$(compiler) -c $< -o $@ $(flags)
+
+$(bindir)/server: $(objdir)/server.o $(objdir)/mysockets.o
+	$(compiler) $^ -o $@ $(flags)
+
+$(objdir)/server.o: $(serverdir)/main.c $(includedir)/mysockets.h
+	$(compiler) -c $< -o $@ $(flags)
 
 clean:
-	rm ./bin/client
-	rm ./bin/server
+	rm $(bindir)/client
+	rm $(bindir)/server
+	rm $(objdir)/client.o
+	rm $(objdir)/server.o
+	rm $(objdir)/mysockets.o
