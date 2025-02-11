@@ -1,68 +1,60 @@
 #include <stdio.h>
+#include <netdb.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include "../include/mysockets.h"
 
-#define PORT 12000
+// TODO: add define here for number of pending connections
 #define BUFFER_SIZE 100
 
-int Socket(int domain, int type, int protocol) {
-	int socket_fd;
-
-	if ((socket_fd = socket(domain, type, protocol)) < 0) {
-		printf("Failed to create a socket!\n");
-		exit(1);
-	}
-	
-	return socket_fd;
-}
-
-void Bind(int socket, const struct sockaddr *address, socklen_t address_len) {
-	if (bind(socket, address, address_len) < 0) {
-		printf("Failed to bind socket\n");
-		exit(1);
-	}
-}
-
-void Listen(int socket, int backlog) {
-	if (listen(socket, backlog) < 0) {
-		printf("Failed to listen!\n");
-		exit(1);
-	}
-}
-
 int main(int argc, char **argv) {
+	if (argc != 2) {
+		printf("Usage: %s <port>\n", argv[0]);
+		exit(1);
+	}
+
+	char *port = argv[1];
+
 	int socket_fd;
 	char buffer[BUFFER_SIZE];
-	struct sockaddr_in server_addr, client_addr;
+	struct addrinfo hints, *servinfo;
+	struct sockaddr_in client_addr;
 	int client_struct_length = sizeof(client_addr);
 
 	memset(buffer, '\0', BUFFER_SIZE);
-	memset(&server_addr, 0, sizeof(struct sockaddr_in));
 	memset(&client_addr, 0, sizeof(struct sockaddr_in));
 
-    server_addr.sin_family = AF_INET; 
-    server_addr.sin_port = htons(PORT); 
- 	server_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); 
+	hints.ai_family = AF_UNSPEC; // IPv4 or v6 (no preference)
+	hints.ai_socktype = SOCK_STREAM; // TCP
+	hints.ai_flags = AI_PASSIVE; // fill in my IP for me
+
+	if (getaddrinfo(NULL, port, &hints, &servinfo) != 0) {
+		printf("Unable to getaddrinfo\n");
+		exit(1);
+	}
 
 	// create a TCP socket
-	socket_fd = Socket(AF_INET, SOCK_STREAM, 0);
+	socket_fd = Socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
 
 	// bind that socket to our port of choice
-	Bind(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr));
+	Bind(socket_fd, servinfo->ai_addr, servinfo->ai_addrlen);
 
 	// turn this into a 'listening' socket
 	Listen(socket_fd, 10);
 
-	printf("Server listening on port %d...\n", PORT);
+	printf("Server listening on port %s...\n", port);
 
 	int connected_fd = -1;
 	struct sockaddr client_address;
 	socklen_t client_addr_len = sizeof(client_address);
 
 	while ((connected_fd = accept(socket_fd, &client_address, &client_addr_len)) > 0) {
+		printf("Connected to a new client...\n"); // could print out their addr info (IP and port)
+
+		// could use buffered io here?
 		while (read(connected_fd, buffer, BUFFER_SIZE) > 0) {
 			printf("From client: %s", buffer);
 			memset(buffer, '\0', BUFFER_SIZE);
@@ -73,6 +65,7 @@ int main(int argc, char **argv) {
 	}
 
 	close(socket_fd);
+	freeaddrinfo(servinfo);
 
 	return 0;
 }

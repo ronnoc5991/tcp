@@ -1,52 +1,58 @@
 #include <stdio.h>
+#include <netdb.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include "../include/mysockets.h"
 
-#define PORT 12000
 #define MAX_MESSAGE 100
 
-int Socket(int domain, int type, int protocol) {
-	int socket_fd;
-
-	if ((socket_fd = socket(domain, type, protocol)) < 0) {
-		printf("Failed to create a socket!\n");
+int main(int argc, char **argv) {
+	if (argc != 3) {
+		printf("Usage: %s hostname/IP port\n", argv[0]);
 		exit(1);
 	}
-	
-	return socket_fd;
-}
 
-int main(int argc, char **argv) {
+	char *hostname = argv[1];
+	char *port = argv[2];
+
 	int socket_fd;
 	char message[MAX_MESSAGE];
-	struct sockaddr_in server_addr;
+	struct addrinfo hints, *res, *p;
 
+	memset(&hints, 0, sizeof hints);
 	memset(message, '\0', MAX_MESSAGE);
-	memset(&server_addr, 0, sizeof(struct sockaddr_in));
 
-	server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
+	hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
+	hints.ai_socktype = SOCK_STREAM; // TCP
+	hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
-	if (inet_pton(AF_INET, "127.0.0.1", &(server_addr.sin_addr)) <= 0) {
-		printf("Unable to translate IP address\n");
+	getaddrinfo(hostname, port, &hints, &res);
+	
+	for (p = res; p != NULL; p = p->ai_next) {
+		socket_fd = Socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+
+		if (socket_fd < 0) {
+			continue;
+		}
+
+		if (connect(socket_fd, p->ai_addr, p->ai_addrlen) < 0) {
+			printf("Failed to connect to server\n");
+			socket_fd = -1;
+		}
+
+		break; // we made a connection successfully
+	}
+
+	if (socket_fd < 0) {
+		printf("Unable to establish a connection with process at %s:%s\n", hostname, port);
 		exit(1);
 	}
 
-	// create a UDP socket
-	socket_fd = Socket(AF_INET, SOCK_STREAM, 0);
-
-	// associate the server address with this socket
-	if (connect(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-		printf("Failed to connect to server\n");
-	}
-
-	int loop = 1;
-
-	while (loop) {
+	while (1) {
 		printf("> ");
 
 		if (fgets(message, MAX_MESSAGE, stdin) == NULL) {
@@ -55,7 +61,7 @@ int main(int argc, char **argv) {
 		}
 
 		if (strcmp(message, "exit\n") == 0) {
-			loop = 0;
+			break;
 		} else {
 			if (send(socket_fd, message, strlen(message), 0) < 0) {
 				printf("Failed to send the message :(\n");
